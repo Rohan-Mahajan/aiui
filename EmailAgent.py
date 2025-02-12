@@ -9,22 +9,16 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# ---------------------------
 # Email credentials and addresses
-# ---------------------------
 email_password = "qcof scde ezte sxwn"
 sender_email = "rohannmahajan0707@gmail.com"     # Sender's email
 receiver_email = "rohumahajan0707@gmail.com"             # Receiver's email
 
-# ---------------------------
 # Helper function: Similarity computation
-# ---------------------------
 def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
-# ---------------------------
 # Import LangGraph and LangChain components
-# ---------------------------
 from langgraph.graph import END, StateGraph
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -32,9 +26,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 
-# ---------------------------
 # Initialize the LLM
-# ---------------------------
 groq_api = userdata.get("groq_api_key")
 llm = ChatGroq(
     groq_api_key=groq_api,
@@ -42,9 +34,7 @@ llm = ChatGroq(
     model_name="gemma2-9b-it",
 )
 
-# ---------------------------
 # Load CSV files
-# ---------------------------
 try:
     defects_df = pd.read_csv("/content/defects.csv")
 except Exception:
@@ -55,9 +45,7 @@ try:
 except Exception:
     test_cases_df = pd.DataFrame(columns=["Module", "Test_Scenario", "Test_Steps", "Pre_Requisite", "Pass_Fail_Criteria", "Expected_Result"])
 
-# ---------------------------
 # Build documents from defects.csv (using columns: Description, Solution, Module)
-# ---------------------------
 docs = []
 for _, row in defects_df.iterrows():
     if pd.notna(row.get("Description")) and pd.notna(row.get("Solution")):
@@ -69,16 +57,12 @@ for _, row in defects_df.iterrows():
             }
         ))
 
-# ---------------------------
 # Create embeddings and FAISS vector store for retrieval
-# ---------------------------
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 vector_store = FAISS.from_documents(docs, embeddings)
 retriever = vector_store.as_retriever(search_kwargs={"k": 1})
 
-# ---------------------------
 # CSV Test Cases Fetching (without classification)
-# ---------------------------
 def get_csv_test_cases(module: str) -> List[dict]:
     test_cases = []
     global test_cases_df
@@ -106,9 +90,7 @@ def get_csv_test_cases(module: str) -> List[dict]:
         test_cases.append(tc_dict)
     return test_cases
 
-# ---------------------------
 # Helper to parse generated test cases into fields
-# ---------------------------
 def parse_test_case(tc_text: str) -> dict:
     fields = {
         "Test_Scenario": "",
@@ -124,9 +106,7 @@ def parse_test_case(tc_text: str) -> dict:
             fields[field] = match.group(1).strip()
     return fields
 
-# ---------------------------
 # Helper to save new test cases to CSV (avoiding duplicates)
-# ---------------------------
 def save_new_test_cases(new_cases: List[dict]):
     global test_cases_df
     required_columns = ["Module", "Test_Scenario", "Test_Steps", "Pre_Requisite", "Pass_Fail_Criteria", "Expected_Result"]
@@ -149,17 +129,13 @@ def save_new_test_cases(new_cases: List[dict]):
         test_cases_df = pd.concat([test_cases_df, new_df], ignore_index=True)
         test_cases_df.to_csv("/content/test_cases.csv", index=False)
 
-# ---------------------------
 # Define Agent State
-# ---------------------------
 class AgentState(TypedDict):
     input: str
     context: List[Document]
     response: str
 
-# ---------------------------
 # Core Node: Validate or Generate Test Cases (with analysis of CSV test cases)
-# ---------------------------
 def validate_or_generate_test_cases(state: AgentState) -> dict:
     try:
         error_message = state["input"]
@@ -360,9 +336,7 @@ def validate_or_generate_test_cases(state: AgentState) -> dict:
     except Exception as e:
         return {"response": f"Error processing request: {e}"}
 
-# ---------------------------
 # Function to Send Email with Formatted HTML Body
-# ---------------------------
 def send_email(final_solution: str):
     email_body = f"""<html>
   <head>
@@ -391,9 +365,7 @@ def send_email(final_solution: str):
     except Exception as e:
         print(f"Error in sending email: {e}")
 
-# ---------------------------
 # Build the StateGraph Workflow
-# ---------------------------
 workflow = StateGraph(AgentState)
 workflow.add_node("retrieve", lambda state: {"context": retriever.invoke(state["input"])})
 workflow.add_node("validate_or_generate_test_cases", validate_or_generate_test_cases)
@@ -402,9 +374,7 @@ workflow.add_edge("retrieve", "validate_or_generate_test_cases")
 workflow.add_edge("validate_or_generate_test_cases", END)
 agent = workflow.compile()
 
-# ---------------------------
 # Automated Evaluation Functions (Optional)
-# ---------------------------
 def auto_evaluate_solution(response: str) -> int:
     if "### END TEST CASE ###" in response:
         return 5
@@ -466,9 +436,7 @@ def get_solution_autonomously(error_message: str) -> str:
         iteration += 1
     return response
 
-# ---------------------------
 # Main Execution: Run Agent and Send Email
-# ---------------------------
 def main():
     error_description = "BIOS not booting up"
     final_solution = get_solution_autonomously(error_description)
